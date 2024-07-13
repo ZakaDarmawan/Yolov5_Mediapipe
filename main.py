@@ -3,9 +3,6 @@ import torch
 import cv2
 import mediapipe as mp
 
-mp_holistic = mp.solutions.holistic
-holistic = mp_holistic.Holistic()
-
 def detect_and_estimate(image):
     # YOLOv5 detection
     results = model(image)
