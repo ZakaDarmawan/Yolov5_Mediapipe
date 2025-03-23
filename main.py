@@ -1,39 +1,44 @@
 import torch
-
-import cv2
 import mediapipe as mp
+import streamlit as st
+import cv2
+import numpy as np
 
-def detect_and_estimate(image):
-    # YOLOv5 detection
-    results = model(image)
+# Load the custom YOLOv5 model
+model = torch.hub.load('ultralytics/yolov5', 'custom', path='../yolov5s.pt')
 
-    # MediaPipe pose estimation
-    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    results_mediapipe = holistic.process(image_rgb)
+# Initialize MediaPipe Pose
+mp_pose = mp.solutions.pose
+pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
 
-    # Draw YOLOv5 results
-    for result in results.xyxy[0]:  # xyxy is the format for bounding box coordinates
-        x1, y1, x2, y2, conf, cls = result
-        if int(cls) == 0:  # 0 is the class for 'person' in COCO dataset
-            cv2.rectangle(image, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
-    
-    # Draw MediaPipe results
-    mp.solutions.drawing_utils.draw_landmarks(image, results_mediapipe.pose_landmarks, mp_holistic.POSE_CONNECTIONS)
+# Streamlit Dashboard Setup
+st.title("YOLOv5 + MediaPipe Pose Estimation with Streamlit")
+video_placeholder = st.empty()
 
-    return image
-
-cap = cv2.VideoCapture(0)  # Capture from webcam
+# Setup webcam stream
+cap = cv2.VideoCapture(0)
 
 while cap.isOpened():
     ret, frame = cap.read()
     if not ret:
         break
 
-    output_frame = detect_and_estimate(frame)
-    cv2.imshow('Output', output_frame)
+    # YOLOv5 object detection
+    results = model(frame)
+    for *xyxy, conf, cls in results.xyxy[0]:
+        label = f"{model.names[int(cls)]} {conf:.2f}"
+        xyxy = list(map(int, xyxy))
+        cv2.rectangle(frame, (xyxy[0], xyxy[1]), (xyxy[2], xyxy[3]), (0, 255, 0), 2)
+        cv2.putText(frame, label, (xyxy[0], xyxy[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+    # MediaPipe Pose Estimation
+    results_pose = pose.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+    if results_pose.pose_landmarks:
+        mp.solutions.drawing_utils.draw_landmarks(frame, results_pose.pose_landmarks, mp_pose.POSE_CONNECTIONS)
 
+    # Convert frame to RGB for Streamlit
+    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    video_placeholder.image(frame_rgb, channels="RGB", use_column_width=True)
+
+# Release the video capture object
 cap.release()
-cv2.destroyAllWindows()
